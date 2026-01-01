@@ -9,6 +9,10 @@ import subprocess
 import sys
 import re
 
+
+os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
+
+
 # ------------------ STREAMLIT CONFIG ------------------
 st.set_page_config(
     page_title="Corn Disease Classifier",
