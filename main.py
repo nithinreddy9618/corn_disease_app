@@ -123,19 +123,29 @@ if "model_load_attempted" not in st.session_state:
     st.session_state.model_load_attempted = False
     st.session_state.model_loaded = False
 
-if not os.path.exists(model_path) and download_link:
-    with st.spinner("Downloading AI model (first time only)…"):
-        success, msg = try_download_model(download_link, model_path)
-        if not success:
-            st.error(msg)
+# Diagnostic: check file existence
+model_exists = os.path.exists(model_path)
 
-if os.path.exists(model_path) and not st.session_state.model_load_attempted:
-    with st.spinner("Loading AI model…"):
+# Step 1: Try to download if model doesn't exist
+if not model_exists and download_link:
+    with st.spinner("📥 Downloading AI model (first time only)…"):
+        success, msg = try_download_model(download_link, model_path)
+        if success:
+            st.success(msg)
+            model_exists = True  # Update the flag
+        else:
+            st.error(f"⚠️ Download failed: {msg}")
+            model_exists = False
+
+# Step 2: Try to load the model if file exists
+if model_exists and not st.session_state.model_load_attempted:
+    with st.spinner("⏳ Loading AI model…"):
         for attempt in range(3):
             try:
                 model = tf.keras.models.load_model(model_path)
                 st.session_state.model_loaded = True
                 st.session_state.model_load_attempted = True
+                st.success("✅ Model loaded successfully!")
                 break
             except Exception as e:
                 model_load_error = str(e)
@@ -143,14 +153,14 @@ if os.path.exists(model_path) and not st.session_state.model_load_attempted:
                     time.sleep(2)
                 else:
                     st.session_state.model_load_attempted = True
-else:
-    # Use cached model from session if already loaded
-    if st.session_state.model_loaded and os.path.exists(model_path):
-        try:
-            model = tf.keras.models.load_model(model_path)
-        except Exception as e:
-            model_load_error = str(e)
-            st.session_state.model_loaded = False
+elif model_exists and st.session_state.model_loaded:
+    # Reload from cache on subsequent reruns
+    try:
+        model = tf.keras.models.load_model(model_path)
+    except Exception as e:
+        model_load_error = str(e)
+        st.session_state.model_loaded = False
+        model = None
 
 # ------------------ LOAD CLASS INDICES ------------------
 class_indices = json.load(open(os.path.join(working_dir, "class_indices.json")))
@@ -246,8 +256,16 @@ if image_source is not None:
                 st.session_state.model_load_attempted = False
                 st.session_state.model_loaded = False
                 st.rerun()
+        
+        # Diagnostic info
+        st.markdown("---")
+        st.markdown("**📋 Diagnostic Info:**")
+        st.markdown(f"- Model file path: `{model_path}`")
+        st.markdown(f"- File exists: {os.path.exists(model_path)}")
+        st.markdown(f"- Download link found: {'Yes' if download_link else 'No'}")
+        
         if model_load_error:
-            st.warning(f"**Error details:** {model_load_error}")
+            st.error(f"**Error:** {model_load_error}")
     else:
         if st.button("Predict"):
             results = predict_with_confidence(model, image_source, class_indices)
