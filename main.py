@@ -118,20 +118,39 @@ if os.path.exists(model_path) and not _is_hdf5_file(model_path):
 model = None
 model_load_error = None
 
+# Initialize session state for model loading
+if "model_load_attempted" not in st.session_state:
+    st.session_state.model_load_attempted = False
+    st.session_state.model_loaded = False
+
 if not os.path.exists(model_path) and download_link:
     with st.spinner("Downloading AI model (first time only)…"):
         success, msg = try_download_model(download_link, model_path)
         if not success:
             st.error(msg)
 
-if os.path.exists(model_path):
-    for _ in range(3):
+if os.path.exists(model_path) and not st.session_state.model_load_attempted:
+    with st.spinner("Loading AI model…"):
+        for attempt in range(3):
+            try:
+                model = tf.keras.models.load_model(model_path)
+                st.session_state.model_loaded = True
+                st.session_state.model_load_attempted = True
+                break
+            except Exception as e:
+                model_load_error = str(e)
+                if attempt < 2:
+                    time.sleep(2)
+                else:
+                    st.session_state.model_load_attempted = True
+else:
+    # Use cached model from session if already loaded
+    if st.session_state.model_loaded and os.path.exists(model_path):
         try:
             model = tf.keras.models.load_model(model_path)
-            break
         except Exception as e:
             model_load_error = str(e)
-            time.sleep(2)
+            st.session_state.model_loaded = False
 
 # ------------------ LOAD CLASS INDICES ------------------
 class_indices = json.load(open(os.path.join(working_dir, "class_indices.json")))
@@ -219,9 +238,16 @@ if image_source is not None:
     st.image(image.resize((180, 180)), caption="Input Image")
 
     if model is None:
-        st.error("Model not loaded yet.")
+        col1, col2 = st.columns(2)
+        with col1:
+            st.error("⚠️ Model not loaded yet.")
+        with col2:
+            if st.button("🔄 Retry Loading Model"):
+                st.session_state.model_load_attempted = False
+                st.session_state.model_loaded = False
+                st.experimental_rerun()
         if model_load_error:
-            st.warning(model_load_error)
+            st.warning(f"**Error details:** {model_load_error}")
     else:
         if st.button("Predict"):
             results = predict_with_confidence(model, image_source, class_indices)
