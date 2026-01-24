@@ -245,7 +245,7 @@ if image_source is not None:
             if st.button("🔄 Retry Loading Model"):
                 st.session_state.model_load_attempted = False
                 st.session_state.model_loaded = False
-                st.experimental_rerun()
+                st.rerun()
         if model_load_error:
             st.warning(f"**Error details:** {model_load_error}")
     else:
